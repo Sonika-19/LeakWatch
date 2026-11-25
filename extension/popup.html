@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Sandbox</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <img src="icons/icon48.png" alt="" class="logo" width="28" height="28" />
+      <div>
+        <h1>Privacy Sandbox</h1>
+        <p class="subtitle">LeakWatch local sanitization</p>
+      </div>
+      <div class="header-actions">
+        <button
+          id="maximize-btn"
+          class="header-icon-btn"
+          type="button"
+          title="Maximize (Open in Full Tab)"
+          aria-label="Maximize"
+        >
+          <svg id="maximize-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+        </button>
+        <span id="backend-status" class="status-badge status-unknown" title="Backend connection">●</span>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button id="tab-btn-text" class="tab active" type="button" role="tab" aria-selected="true" data-tab="text">
+        Text
+      </button>
+      <button id="tab-btn-image" class="tab" type="button" role="tab" aria-selected="false" data-tab="image">
+        Image
+      </button>
+      <button id="tab-btn-audio" class="tab" type="button" role="tab" aria-selected="false" data-tab="audio">
+        Audio
+      </button>
+      <button id="tab-btn-video" class="tab" type="button" role="tab" aria-selected="false" data-tab="video">
+        Video
+      </button>
+      <button id="tab-btn-policy" class="tab" type="button" role="tab" aria-selected="false" data-tab="policy">
+        Policy
+      </button>
+      <button id="tab-btn-audit" class="tab" type="button" role="tab" aria-selected="false" data-tab="audit">
+        Audit
+      </button>
+    </nav>
+
+    <section id="error-panel" class="error-panel hidden" role="alert"></section>
+
+    <!-- ==================== TEXT TAB ==================== -->
+    <div id="tab-text" class="tab-panel active" role="tabpanel">
+      <section class="panel">
+        <label for="input-text" class="label">Your prompt</label>
+        <textarea
+          id="input-text"
+          rows="6"
+          placeholder="Enter text to sanitize before sending to an LLM…"
+          spellcheck="true"
+        ></textarea>
+        <button id="sanitize-btn" type="button" class="btn btn-primary">Sanitize</button>
+      </section>
+
+      <section id="preview-panel" class="panel hidden">
+        <h2 class="section-title">Sanitized preview</h2>
+        <div class="compare">
+          <div class="compare-block">
+            <span class="label">Original</span>
+            <pre id="original-preview" class="preview-box"></pre>
+          </div>
+          <div class="compare-block">
+            <span class="label">Preview</span>
+            <pre id="sanitized-preview" class="preview-box highlight"></pre>
+          </div>
+        </div>
+
+        <div class="entities-block">
+          <h3 class="section-title">Detected entities</h3>
+          <ul id="entities-list" class="entities-list"></ul>
+          <p id="no-entities" class="muted hidden">No sensitive entities detected.</p>
+          <div id="entity-selection-controls" class="entity-selection-controls hidden">
+            <div class="entity-selection-actions">
+              <button id="select-all-entities-btn" type="button" class="btn btn-secondary">Select All</button>
+              <button id="clear-all-entities-btn" type="button" class="btn btn-secondary">Clear All</button>
+            </div>
+            <button id="apply-mitigation-btn" type="button" class="btn btn-primary" disabled>Apply Mitigation</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="copy-btn" type="button" class="btn btn-secondary" disabled>
+            Copy Sanitized Text
+          </button>
+          <button id="send-btn" type="button" class="btn btn-accent" disabled>
+            Send To LLM
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ==================== IMAGE TAB ==================== -->
+    <div id="tab-image" class="tab-panel hidden" role="tabpanel">
+      <section class="panel">
+        <label for="image-input" class="label">Upload image</label>
+        <input
+          id="image-input"
+          type="file"
+          accept=".png,.jpg,.jpeg,.bmp,.webp,image/*"
+        />
+        <p class="muted file-hint">Supported: PNG, JPEG, BMP, WebP</p>
+        <button id="image-sanitize-btn" type="button" class="btn btn-primary" disabled>
+          Sanitize Image
+        </button>
+      </section>
+
+      <section id="image-preview-panel" class="panel hidden">
+        <div class="step-header">
+          <h2 class="section-title" style="margin-bottom: 0;">Before / after</h2>
+          <button id="image-expand-btn" type="button" class="panel-expand-btn" title="Open Full Sanitized Image in New Tab" aria-label="Open Full Image">⤢ Full View</button>
+        </div>
+        <div class="image-compare">
+          <div class="compare-block">
+            <span class="label">Original</span>
+            <div class="image-frame" id="original-image-frame" title="Click to view full original image">
+              <img id="original-image" alt="Original upload preview" />
+            </div>
+          </div>
+          <div class="compare-block">
+            <span class="label">Sanitized</span>
+            <div class="image-frame highlight" id="sanitized-image-frame" title="Click to view full sanitized image">
+              <div id="sanitized-placeholder" class="preview-empty-state">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5; margin-bottom:4px;">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+                <span>Ready to sanitize</span>
+              </div>
+              <img id="sanitized-image" class="hidden" alt="Sanitized image preview" />
+            </div>
+          </div>
+        </div>
+
+        <div class="entities-block">
+          <h3 class="section-title">Detected entities</h3>
+          <ul id="image-entities-list" class="entities-list"></ul>
+          <p id="image-no-entities" class="muted hidden">No sensitive entities detected.</p>
+          <div id="image-entity-selection-controls" class="entity-selection-controls hidden">
+            <div class="entity-selection-actions">
+              <button id="image-select-all-entities-btn" type="button" class="btn btn-secondary">Select All</button>
+              <button id="image-clear-all-entities-btn" type="button" class="btn btn-secondary">Clear All</button>
+            </div>
+            <button id="image-apply-mitigation-btn" type="button" class="btn btn-primary" disabled>Apply Mitigation</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="download-btn" type="button" class="btn btn-accent" disabled>
+            Download Sanitized Image
+          </button>
+          <button id="image-clear-btn" type="button" class="btn btn-secondary" title="Clear current image and scan another">
+            New Scan
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ==================== AUDIO TAB ==================== -->
+    <div id="tab-audio" class="tab-panel hidden" role="tabpanel">
+      <section class="panel">
+        <label for="audio-input" class="label">Upload audio</label>
+        <input
+          id="audio-input"
+          type="file"
+          accept=".wav,.mp3,.m4a,.aac,.flac,.ogg,.opus,.webm,audio/*"
+        />
+        <p class="muted file-hint">Supported: WAV, MP3, M4A, AAC, FLAC, OGG, WebM</p>
+
+        <!-- RECORD AUDIO SECTION -->
+        <div class="audio-record-divider">
+          <span>OR RECORD VOICE</span>
+        </div>
+
+        <div class="audio-record-box">
+          <div class="audio-record-controls">
+            <button id="audio-record-btn" type="button" class="btn btn-secondary record-btn">
+              <span id="audio-record-icon" class="record-icon">🎙️</span>
+              <span id="audio-record-label">Record Voice</span>
+            </button>
+            <span id="audio-record-timer" class="record-timer hidden">00:00</span>
+          </div>
+
+          <div id="audio-recorded-container" class="recorded-preview-box hidden">
+            <span class="label">Recorded audio (listen before sanitizing):</span>
+            <audio id="audio-recorded-player" controls class="media-player audio-player-compact"></audio>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 14px; margin-bottom: 14px;">
+          <label for="audio-mask-style" class="label">Audio Masking Strategy</label>
+          <select id="audio-mask-style" class="select-input" style="width: 100%; padding: 8px; border-radius: 6px; background: #1e1e2e; color: #fff; border: 1px solid #3e3e5e;">
+            <option value="beep">1000 Hz Beep Tone</option>
+            <option value="silence">Zero-Amplitude Silence</option>
+            <option value="white_noise">White Noise Masking</option>
+            <option value="pink_noise">Pink (1/f) Noise Masking</option>
+            <option value="garble">Voice Pitch Garble &amp; Distortion</option>
+          </select>
+        </div>
+
+        <button id="audio-sanitize-btn" type="button" class="btn btn-primary" disabled>
+          Sanitize Audio
+        </button>
+      </section>
+
+      <section id="audio-preview-panel" class="panel hidden">
+        <h2 class="section-title">Sanitized audio preview</h2>
+        <div class="media-preview-container">
+          <audio id="sanitized-audio" controls class="media-player"></audio>
+        </div>
+
+        <div class="entities-block">
+          <h3 class="section-title">Detected entities</h3>
+          <ul id="audio-entities-list" class="entities-list"></ul>
+          <p id="audio-no-entities" class="muted hidden">No sensitive entities detected.</p>
+        </div>
+
+        <div class="actions">
+          <button id="audio-download-btn" type="button" class="btn btn-accent" disabled>
+            Download Sanitized Audio
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ==================== VIDEO TAB ==================== -->
+    <div id="tab-video" class="tab-panel hidden" role="tabpanel">
+      <!-- Step 1: Upload Video -->
+      <section class="panel">
+        <div class="step-header">
+          <span class="step-badge">Step 1</span>
+          <span class="step-title">Upload Video</span>
+        </div>
+        <label for="video-input" class="label">Choose a video file</label>
+        <input
+          id="video-input"
+          type="file"
+          accept=".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*"
+        />
+        <p class="muted file-hint">Supported: MP4, MOV, AVI, MKV, WebM</p>
+        <div id="video-scan-status" class="scan-status-message hidden">
+          <span class="spinner"></span> Detecting faces in video…
+        </div>
+      </section>
+
+      <!-- Step 2: Interactive Face Selection -->
+      <section id="video-face-selection-panel" class="panel hidden">
+        <div class="step-header">
+          <span class="step-badge">Step 2</span>
+          <span class="step-title">Select Faces to Mitigate</span>
+        </div>
+        <p id="video-face-count-text" class="sub-text">Detected faces:</p>
+
+        <!-- Annotated frame preview -->
+        <div id="video-annotated-frame-container" class="annotated-frame-wrapper hidden">
+          <img id="video-annotated-frame" alt="First frame with face IDs" />
+        </div>
+
+        <!-- Face selector grid -->
+        <div id="video-face-grid" class="face-grid"></div>
+
+        <!-- Sensitive Information Detected Banner -->
+        <div id="video-sensitive-info-banner" class="sensitive-info-banner hidden">
+          <div class="banner-header">
+            <span class="shield-badge">🛡️ Sensitive PII Detected</span>
+          </div>
+          <p id="video-sensitive-info-text" class="banner-text">
+            Sensitive data found in video frames.
+          </p>
+          <label class="checkbox-inline">
+            <input type="checkbox" id="video-redact-sensitive-toggle" checked />
+            <span>Redact sensitive text & credentials with realistic synthetic Faker data</span>
+          </label>
+        </div>
+
+        <!-- Mode Radio Toggle -->
+        <div class="control-group">
+          <span class="label">Mitigation Mode</span>
+          <div class="radio-group">
+            <label class="radio-card">
+              <input type="radio" name="video-mode" value="blur_selected" checked />
+              <div class="radio-card-content">
+                <strong>Blur selected faces</strong>
+                <span class="muted">Only chosen faces will be blurred</span>
+              </div>
+            </label>
+            <label class="radio-card">
+              <input type="radio" name="video-mode" value="blur_all_except" />
+              <div class="radio-card-content">
+                <strong>Blur all except selected</strong>
+                <span class="muted">Keep chosen faces clear, blur others</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Blur strength slider -->
+        <div class="control-group">
+          <div class="slider-header">
+            <label for="video-blur-strength" class="label">Blur Strength</label>
+            <span id="video-blur-strength-val" class="slider-val">99</span>
+          </div>
+          <input
+            id="video-blur-strength"
+            type="range"
+            min="15"
+            max="99"
+            step="2"
+            value="99"
+            class="slider-input"
+          />
+        </div>
+
+        <!-- Audio Privacy Mitigation Option -->
+        <div id="video-audio-mitigation-group" class="control-group">
+          <span class="label">Audio Privacy Mitigation</span>
+          <label class="toggle-card">
+            <input type="checkbox" id="video-mitigate-audio-toggle" checked />
+            <div class="toggle-card-content">
+              <strong>Mitigate audio track (Spoken PII)</strong>
+              <span id="video-audio-hint" class="muted">Transcribe speech & beep/mute spoken PII (names, phone numbers, IDs)</span>
+            </div>
+          </label>
+        </div>
+
+        <!-- Step 3: Action Buttons -->
+        <div class="actions vertical-actions">
+          <button id="video-apply-selective-btn" type="button" class="btn btn-primary">
+            Apply Selective Sanitization
+          </button>
+          <button id="video-sanitize-btn" type="button" class="btn btn-secondary">
+            Blur Everything (Blanket Blur)
+          </button>
+        </div>
+      </section>
+
+      <!-- Step 4: Result Preview & Download -->
+      <section id="video-preview-panel" class="panel hidden">
+        <div class="step-header">
+          <span class="step-badge">Step 3</span>
+          <span class="step-title">Sanitized Video Preview</span>
+          <button id="video-expand-btn" type="button" class="panel-expand-btn" title="Open Full Sanitized Video in New Tab" aria-label="Open Full Video">⤢ Full View</button>
+        </div>
+        <div class="media-preview-container">
+          <video id="sanitized-video" controls controlsList="nofullscreen" class="media-player"></video>
+        </div>
+
+        <div id="video-audio-mitigated-badge" class="sensitive-info-banner hidden" style="margin-top: 10px; padding: 8px 10px; border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.08);">
+          <span style="font-size: 11px; font-weight: 600; color: #22c55e;">
+            🔊 Audio Privacy Protected — Spoken PII tone-masked with audio beeps
+          </span>
+        </div>
+
+        <div class="entities-block">
+          <h3 class="section-title">Detected entities</h3>
+          <ul id="video-entities-list" class="entities-list"></ul>
+          <p id="video-no-entities" class="muted hidden">No sensitive entities detected.</p>
+        </div>
+
+        <div class="actions">
+          <button id="video-download-btn" type="button" class="btn btn-accent" disabled>
+            Download Sanitized Video
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ==================== POLICY TAB ==================== -->
+    <div id="tab-policy" class="tab-panel" role="tabpanel">
+      <section class="panel">
+        <h2 class="section-title">In-Extension Policy Configuration</h2>
+        <p class="muted">Customize allowlists, custom regex rules, and blur parameters.</p>
+
+        <div class="form-group" style="margin-top: 12px;">
+          <label for="policy-allowlist" class="label">Allowlisted Terms (one per line)</label>
+          <textarea id="policy-allowlist" rows="3" placeholder="e.g. AcmeCorp&#10;InternalDemo"></textarea>
+        </div>
+
+        <div class="form-group" style="margin-top: 12px;">
+          <label for="policy-regex" class="label">Custom Regex Patterns (one per line)</label>
+          <textarea id="policy-regex" rows="3" placeholder="e.g. [A-Z]{3}-\d{4}"></textarea>
+        </div>
+
+        <div class="form-group" style="margin-top: 12px;">
+          <label for="policy-blur-strength" class="label">Face Blur Strength (<span id="blur-strength-val">51</span>px)</label>
+          <input type="range" id="policy-blur-strength" min="15" max="151" step="2" value="51" style="width: 100%;" />
+        </div>
+
+        <div class="form-group" style="margin-top: 14px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 10px 12px; display: flex; align-items: flex-start; gap: 10px;">
+          <input type="checkbox" id="policy-audit-hash" style="margin-top: 3px; cursor: pointer; width: 16px; height: 16px; accent-color: #3b82f6;" />
+          <div style="flex: 1;">
+            <label for="policy-audit-hash" class="label" style="cursor: pointer; margin-bottom: 2px; font-weight: 600; color: #f1f5f9;">Hash Sensitive Spans in Audit Logs (SHA-256)</label>
+            <p class="muted" style="font-size: 11px; margin: 0; line-height: 1.35;">When enabled, replaces plain-text PII in local <code>.audit.json</code> files with irreversible 64-character SHA-256 cryptographic digests.</p>
+          </div>
+        </div>
+
+        <div class="actions" style="margin-top: 16px;">
+          <button id="policy-save-btn" type="button" class="btn btn-primary">Save Policy</button>
+          <button id="policy-reset-btn" type="button" class="btn btn-secondary">Reset to Defaults</button>
+        </div>
+        <p id="policy-status-msg" class="muted hidden" style="margin-top: 8px; color: #4ade80;">Settings saved successfully!</p>
+      </section>
+    </div>
+
+    <!-- ==================== AUDIT TAB ==================== -->
+    <div id="tab-audit" class="tab-panel" role="tabpanel">
+      <section class="panel">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h2 class="section-title">Audit Log History</h2>
+          <button id="audit-refresh-btn" type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">Refresh</button>
+        </div>
+        <p class="muted">Inspect and download local inspection audit records (.audit.json).</p>
+        <div id="audit-list" class="audit-list" style="margin-top: 12px; max-height: 380px; overflow-y: auto;">
+          <p id="audit-empty" class="muted">Loading audit logs...</p>
+        </div>
+      </section>
+    </div>
+
+    <footer class="footer">
+      <span>localhost:8000 only · no cloud · no storage</span>
+    </footer>
+
+    <!-- Media Lightbox / Full View Modal (Prevents popup auto-close) -->
+    <div id="media-lightbox-modal" class="lightbox-modal hidden" role="dialog" aria-modal="true" aria-label="Full Media Preview">
+      <div id="lightbox-backdrop" class="lightbox-backdrop"></div>
+      <div class="lightbox-dialog">
+        <div class="lightbox-header">
+          <div class="lightbox-info">
+            <span id="lightbox-mode-badge" class="lightbox-badge badge-sanitized">SANITIZED</span>
+            <span id="lightbox-filename" class="lightbox-filename" title="">Preview</span>
+          </div>
+          <div class="lightbox-actions">
+            <button id="lightbox-toggle-btn" type="button" class="btn-lightbox hidden" title="Toggle between original and sanitized view">Show Original</button>
+            <button id="lightbox-open-tab-btn" type="button" class="btn-lightbox" title="Open in persistent browser tab">Open in Tab</button>
+            <button id="lightbox-download-btn" type="button" class="btn-lightbox btn-lightbox-download" title="Download Sanitized File">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              <span>Download</span>
+            </button>
+            <button id="lightbox-close-btn" type="button" class="lightbox-close-btn" title="Close Full View (Esc)" aria-label="Close">✕</button>
+          </div>
+        </div>
+        <div class="lightbox-body">
+          <img id="lightbox-image" class="lightbox-content-media hidden" alt="Full Image Preview" />
+          <video id="lightbox-video" class="lightbox-content-media hidden" controls playsinline></video>
+        </div>
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
